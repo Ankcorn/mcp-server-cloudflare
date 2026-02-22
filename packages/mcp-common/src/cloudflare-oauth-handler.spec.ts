@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { refreshAuthToken } from './cloudflare-auth'
 import { handleTokenExchangeCallback } from './cloudflare-oauth-handler'
 import { McpError } from './mcp-error'
+import { OAuthError } from './workers-oauth-utils'
 
 import type { TokenExchangeCallbackOptions } from '@cloudflare/workers-oauth-provider'
 
@@ -40,7 +41,7 @@ describe('handleTokenExchangeCallback', () => {
 	const clientSecret = 'test-client-secret'
 
 	describe('account_token refresh attempt', () => {
-		it('throws McpError 400 (not 500) for account token refresh', async () => {
+		it('throws OAuthError invalid_grant for account token refresh', async () => {
 			const options = makeRefreshOptions({
 				type: 'account_token',
 				accessToken: 'test-token',
@@ -51,17 +52,17 @@ describe('handleTokenExchangeCallback', () => {
 				await handleTokenExchangeCallback(options, clientId, clientSecret)
 				expect.unreachable()
 			} catch (e) {
-				expect(e).toBeInstanceOf(McpError)
-				const err = e as McpError
-				expect(err.code).toBe(400)
-				expect(err.message).toBe('Account tokens cannot be refreshed')
-				expect(err.reportToSentry).toBe(false)
+				expect(e).toBeInstanceOf(OAuthError)
+				const err = e as OAuthError
+				expect(err.code).toBe('invalid_grant')
+				expect(err.statusCode).toBe(400)
+				expect(err.description).toBe('Account tokens cannot be refreshed')
 			}
 		})
 	})
 
 	describe('missing refresh token', () => {
-		it('throws McpError 400 (not 500) when refreshToken is missing', async () => {
+		it('throws OAuthError invalid_grant when refreshToken is missing', async () => {
 			const options = makeRefreshOptions({
 				type: 'user_token',
 				accessToken: 'test-token',
@@ -74,11 +75,11 @@ describe('handleTokenExchangeCallback', () => {
 				await handleTokenExchangeCallback(options, clientId, clientSecret)
 				expect.unreachable()
 			} catch (e) {
-				expect(e).toBeInstanceOf(McpError)
-				const err = e as McpError
-				expect(err.code).toBe(400)
-				expect(err.message).toBe('No refresh token available for this grant')
-				expect(err.reportToSentry).toBe(false)
+				expect(e).toBeInstanceOf(OAuthError)
+				const err = e as OAuthError
+				expect(err.code).toBe('invalid_grant')
+				expect(err.statusCode).toBe(400)
+				expect(err.description).toBe('No refresh token available for this grant')
 			}
 		})
 	})
@@ -111,8 +112,8 @@ describe('handleTokenExchangeCallback', () => {
 		})
 	})
 
-	describe('propagates upstream errors from refreshAuthToken', () => {
-		it('propagates McpError 400 from expired upstream refresh token', async () => {
+	describe('converts upstream McpErrors from refreshAuthToken to OAuthError', () => {
+		it('converts McpError 400 from expired upstream refresh token to OAuthError invalid_grant', async () => {
 			mockRefreshAuthToken.mockRejectedValueOnce(
 				new McpError('Authorization grant is invalid, expired, or revoked', 400, {
 					reportToSentry: false,
@@ -132,14 +133,17 @@ describe('handleTokenExchangeCallback', () => {
 				await handleTokenExchangeCallback(options, clientId, clientSecret)
 				expect.unreachable()
 			} catch (e) {
-				expect(e).toBeInstanceOf(McpError)
-				const err = e as McpError
-				expect(err.code).toBe(400)
-				expect(err.reportToSentry).toBe(false)
+				expect(e).toBeInstanceOf(OAuthError)
+				const err = e as OAuthError
+				expect(err.code).toBe('invalid_grant')
+				expect(err.statusCode).toBe(400)
+				expect(err.description).toBe(
+					'Authorization grant is invalid, expired, or revoked'
+				)
 			}
 		})
 
-		it('propagates McpError 502 from upstream server error', async () => {
+		it('converts McpError 502 from upstream server error to OAuthError server_error', async () => {
 			mockRefreshAuthToken.mockRejectedValueOnce(
 				new McpError('Upstream token service unavailable', 502, {
 					reportToSentry: true,
@@ -159,10 +163,32 @@ describe('handleTokenExchangeCallback', () => {
 				await handleTokenExchangeCallback(options, clientId, clientSecret)
 				expect.unreachable()
 			} catch (e) {
-				expect(e).toBeInstanceOf(McpError)
-				const err = e as McpError
-				expect(err.code).toBe(502)
-				expect(err.reportToSentry).toBe(true)
+				expect(e).toBeInstanceOf(OAuthError)
+				const err = e as OAuthError
+				expect(err.code).toBe('server_error')
+				expect(err.statusCode).toBe(500)
+				expect(err.description).toBe('Upstream token service unavailable')
+			}
+		})
+
+		it('re-throws non-McpError errors unchanged', async () => {
+			const genericError = new Error('unexpected failure')
+			mockRefreshAuthToken.mockRejectedValueOnce(genericError)
+
+			const options = makeRefreshOptions({
+				type: 'user_token',
+				accessToken: 'test-token',
+				refreshToken: 'valid-refresh-token',
+				user: { id: 'user-1', email: 'user@example.com' },
+				accounts: [{ name: 'test', id: 'test-id' }],
+			})
+
+			try {
+				await handleTokenExchangeCallback(options, clientId, clientSecret)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBe(genericError)
+				expect(e).not.toBeInstanceOf(OAuthError)
 			}
 		})
 	})

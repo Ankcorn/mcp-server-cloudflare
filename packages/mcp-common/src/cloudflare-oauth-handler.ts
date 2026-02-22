@@ -33,6 +33,24 @@ import type { Context } from 'hono'
 import type { MetricsTracker } from '../../mcp-observability/src'
 import type { BaseHonoContext } from './sentry'
 
+/**
+ * Converts an McpError into an OAuth 2.1 spec-compliant JSON error response.
+ *
+ * Maps HTTP status codes to the standard OAuth error codes defined in
+ * https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13#section-3.2.4
+ */
+function mcpErrorToOAuthResponse(e: McpError): Response {
+	let oauthCode: string
+	if (e.code >= 500) {
+		oauthCode = 'server_error'
+	} else if (e.code === 401 || e.code === 403) {
+		oauthCode = 'access_denied'
+	} else {
+		oauthCode = 'invalid_request'
+	}
+	return new OAuthError(oauthCode, e.message, e.code >= 500 ? 500 : e.code).toResponse()
+}
+
 type AuthContext = {
 	Bindings: {
 		OAUTH_PROVIDER: OAuthHelpers
@@ -198,26 +216,34 @@ export async function handleTokenExchangeCallback(
 		const props = AuthProps.parse(options.props)
 		if (props.type === 'account_token') {
 			// Account tokens cannot be refreshed — this is a client error, not a server error
-			throw new McpError('Account tokens cannot be refreshed', 400, {
-				reportToSentry: false,
-			})
+			throw new OAuthError('invalid_grant', 'Account tokens cannot be refreshed', 400)
 		}
 		if (!props.refreshToken) {
-			throw new McpError('No refresh token available for this grant', 400, {
-				reportToSentry: false,
-			})
+			throw new OAuthError('invalid_grant', 'No refresh token available for this grant', 400)
 		}
 
-		// handle token refreshes
-		const {
-			access_token: accessToken,
-			refresh_token: refreshToken,
-			expires_in,
-		} = await refreshAuthToken({
-			client_id: clientId,
-			client_secret: clientSecret,
-			refresh_token: props.refreshToken,
-		})
+		// handle token refreshes — convert upstream McpErrors to OAuth-compliant errors
+		let accessToken: string
+		let refreshToken: string
+		let expires_in: number
+		try {
+			const result = await refreshAuthToken({
+				client_id: clientId,
+				client_secret: clientSecret,
+				refresh_token: props.refreshToken,
+			})
+			accessToken = result.access_token
+			refreshToken = result.refresh_token
+			expires_in = result.expires_in
+		} catch (e) {
+			if (e instanceof McpError) {
+				// Map upstream failures to OAuth error codes:
+				// 5xx upstream → server_error; 4xx upstream → invalid_grant (refresh token rejected)
+				const oauthCode = e.code >= 500 ? 'server_error' : 'invalid_grant'
+				throw new OAuthError(oauthCode, e.message, e.code >= 500 ? 500 : 400)
+			}
+			throw e
+		}
 
 		return {
 			newProps: {
@@ -355,10 +381,10 @@ export function createAuthHandlers({
 				return e.toResponse()
 			}
 			if (e instanceof McpError) {
-				return c.text(e.message, { status: e.code })
+				return mcpErrorToOAuthResponse(e)
 			}
 			console.error(e)
-			return c.text('Internal Error', 500)
+			return new OAuthError('server_error', 'Internal Error', 500).toResponse()
 		}
 	})
 
@@ -423,8 +449,11 @@ export function createAuthHandlers({
 			if (e instanceof OAuthError) {
 				return e.toResponse()
 			}
+			if (e instanceof McpError) {
+				return mcpErrorToOAuthResponse(e)
+			}
 			console.error(e)
-			return c.text('Internal Error', 500)
+			return new OAuthError('server_error', 'Internal Error', 500).toResponse()
 		}
 	})
 
@@ -505,9 +534,9 @@ export function createAuthHandlers({
 				return e.toResponse()
 			}
 			if (e instanceof McpError) {
-				return c.text(e.message, { status: e.code })
+				return mcpErrorToOAuthResponse(e)
 			}
-			return c.text('Internal Error', 500)
+			return new OAuthError('server_error', 'Internal Error', 500).toResponse()
 		}
 	})
 
