@@ -1,14 +1,13 @@
 import { fetchMock } from 'cloudflare:test'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { fetchCloudflareApi } from './cloudflare-api'
 import { McpError } from './mcp-error'
 
 // Mock cloudflare:workers env to disable DEV_DISABLE_OAUTH
 vi.mock('cloudflare:workers', () => ({
 	env: { DEV_DISABLE_OAUTH: false },
 }))
-
-import { fetchCloudflareApi } from './cloudflare-api'
 
 beforeAll(() => {
 	fetchMock.activate()

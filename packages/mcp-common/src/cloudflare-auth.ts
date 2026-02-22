@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import { McpError } from './mcp-error'
 
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AuthRequest } from '@cloudflare/workers-oauth-provider'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 // Constants
 const PKCE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'

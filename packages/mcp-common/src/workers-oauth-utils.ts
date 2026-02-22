@@ -765,7 +765,11 @@ export async function validateOAuthState(
 
 	const parseResult = StoredOAuthStateSchema.safeParse(JSON.parse(storedDataJson))
 	if (!parseResult.success) {
-		throw new OAuthError('invalid_request', 'Invalid OAuth state data format - PKCE security violation', 400)
+		throw new OAuthError(
+			'invalid_request',
+			'Invalid OAuth state data format - PKCE security violation',
+			400
+		)
 	}
 
 	await kv.delete(`oauth:state:${stateToken}`)

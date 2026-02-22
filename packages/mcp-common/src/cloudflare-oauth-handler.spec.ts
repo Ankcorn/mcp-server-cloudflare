@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Import the mocked module
+import { refreshAuthToken } from './cloudflare-auth'
 import { handleTokenExchangeCallback } from './cloudflare-oauth-handler'
 import { McpError } from './mcp-error'
 
@@ -13,8 +15,6 @@ vi.mock('./cloudflare-auth', () => ({
 	getAuthorizationURL: vi.fn(),
 }))
 
-// Import the mocked module
-import { refreshAuthToken } from './cloudflare-auth'
 const mockRefreshAuthToken = vi.mocked(refreshAuthToken)
 
 beforeEach(() => {
@@ -25,9 +25,7 @@ afterEach(() => {
 	vi.restoreAllMocks()
 })
 
-function makeRefreshOptions(
-	propsOverride: Record<string, unknown>
-): TokenExchangeCallbackOptions {
+function makeRefreshOptions(propsOverride: Record<string, unknown>): TokenExchangeCallbackOptions {
 	return {
 		grantType: 'refresh_token',
 		props: propsOverride,
