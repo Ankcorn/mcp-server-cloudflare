@@ -1,6 +1,9 @@
 import { Cloudflare } from 'cloudflare'
 import { env } from 'cloudflare:workers'
 
+import { McpError } from './mcp-error'
+
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { z } from 'zod'
 
 export function getCloudflareClient(apiToken: string) {
@@ -56,7 +59,14 @@ export async function fetchCloudflareApi<T>({
 
 	if (!response.ok) {
 		const error = await response.text()
-		throw new Error(`Cloudflare API request failed: ${error}`)
+		throw new McpError(
+			`Cloudflare API request failed: ${error}`,
+			response.status as ContentfulStatusCode,
+			{
+				reportToSentry: response.status >= 500,
+				internalMessage: `Cloudflare API ${response.status}: ${error}`,
+			}
+		)
 	}
 
 	const data = await response.json()

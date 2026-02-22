@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { McpError } from './mcp-error'
 
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AuthRequest } from '@cloudflare/workers-oauth-provider'
 
 // Constants
@@ -152,8 +153,28 @@ export async function getAuthToken({
 	})
 
 	if (!resp.ok) {
-		console.log(await resp.text())
-		throw new McpError('Failed to get OAuth token', 500, { reportToSentry: true })
+		const body = await resp.text()
+		let upstreamError: { error?: string; error_description?: string } = {}
+		try {
+			upstreamError = JSON.parse(body)
+		} catch {}
+
+		if (resp.status >= 400 && resp.status < 500) {
+			throw new McpError(
+				upstreamError.error_description || 'Token exchange failed',
+				resp.status as ContentfulStatusCode,
+				{
+					reportToSentry: false,
+					internalMessage: `Upstream ${resp.status}: ${body}`,
+				}
+			)
+		}
+
+		// Genuine upstream server error
+		throw new McpError('Upstream token service unavailable', 502, {
+			reportToSentry: true,
+			internalMessage: `Upstream ${resp.status}: ${body}`,
+		})
 	}
 
 	return AuthorizationToken.parse(await resp.json())
@@ -183,8 +204,28 @@ export async function refreshAuthToken({
 		},
 	})
 	if (!resp.ok) {
-		console.log(await resp.text())
-		throw new McpError('Failed to get OAuth token', 500, { reportToSentry: true })
+		const body = await resp.text()
+		let upstreamError: { error?: string; error_description?: string } = {}
+		try {
+			upstreamError = JSON.parse(body)
+		} catch {}
+
+		if (resp.status >= 400 && resp.status < 500) {
+			throw new McpError(
+				upstreamError.error_description || 'Token refresh failed',
+				resp.status as ContentfulStatusCode,
+				{
+					reportToSentry: false,
+					internalMessage: `Upstream ${resp.status}: ${body}`,
+				}
+			)
+		}
+
+		// Genuine upstream server error
+		throw new McpError('Upstream token service unavailable', 502, {
+			reportToSentry: true,
+			internalMessage: `Upstream ${resp.status}: ${body}`,
+		})
 	}
 
 	return AuthorizationToken.parse(await resp.json())

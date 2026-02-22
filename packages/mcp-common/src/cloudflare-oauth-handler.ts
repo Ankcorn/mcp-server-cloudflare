@@ -30,6 +30,7 @@ import type {
 	TokenExchangeCallbackResult,
 } from '@cloudflare/workers-oauth-provider'
 import type { Context } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { MetricsTracker } from '../../mcp-observability/src'
 import type { BaseHonoContext } from './sentry'
 
@@ -105,12 +106,28 @@ export async function getUserAndAccounts(
 		if (accounts !== null) {
 			return { user: null, accounts }
 		}
-		console.log(user)
-		throw new McpError('Failed to fetch user', 500, { reportToSentry: true })
+		const status = userResponse.status
+		const is5xx = status >= 500 && status <= 599
+		throw new McpError(
+			is5xx ? 'Upstream user service unavailable' : 'Failed to fetch user',
+			(is5xx ? 502 : status) as ContentfulStatusCode,
+			{
+				reportToSentry: is5xx,
+				internalMessage: `Upstream /user returned ${status}`,
+			}
+		)
 	}
 	if (!accounts || !accountsResponse.ok) {
-		console.log(accounts)
-		throw new McpError('Failed to fetch accounts', 500, { reportToSentry: true })
+		const status = accountsResponse.status
+		const is5xx = status >= 500 && status <= 599
+		throw new McpError(
+			is5xx ? 'Upstream accounts service unavailable' : 'Failed to fetch accounts',
+			(is5xx ? 502 : status) as ContentfulStatusCode,
+			{
+				reportToSentry: is5xx,
+				internalMessage: `Upstream /accounts returned ${status}`,
+			}
+		)
 	}
 
 	return { user, accounts }
@@ -161,11 +178,15 @@ export async function handleTokenExchangeCallback(
 	if (options.grantType === 'refresh_token') {
 		const props = AuthProps.parse(options.props)
 		if (props.type === 'account_token') {
-			// Refreshing an account_token should not be possible, as we only do this for user tokens
-			throw new McpError('Internal Server Error', 500)
+			// Account tokens cannot be refreshed — this is a client error, not a server error
+			throw new McpError('Account tokens cannot be refreshed', 400, {
+				reportToSentry: false,
+			})
 		}
 		if (!props.refreshToken) {
-			throw new McpError('Missing refreshToken', 500)
+			throw new McpError('No refresh token available for this grant', 400, {
+				reportToSentry: false,
+			})
 		}
 
 		// handle token refreshes
