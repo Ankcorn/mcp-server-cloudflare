@@ -157,7 +157,9 @@ export async function getAuthToken({
 		let upstreamError: { error?: string; error_description?: string } = {}
 		try {
 			upstreamError = JSON.parse(body)
-		} catch {}
+		} catch (_e) {
+			// upstream may return non-JSON error bodies
+		}
 
 		if (resp.status >= 400 && resp.status < 500) {
 			throw new McpError(
@@ -208,7 +210,9 @@ export async function refreshAuthToken({
 		let upstreamError: { error?: string; error_description?: string } = {}
 		try {
 			upstreamError = JSON.parse(body)
-		} catch {}
+		} catch (_e) {
+			// upstream may return non-JSON error bodies
+		}
 
 		if (resp.status >= 400 && resp.status < 500) {
 			throw new McpError(
