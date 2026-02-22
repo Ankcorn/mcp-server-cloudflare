@@ -59,11 +59,13 @@ export async function fetchCloudflareApi<T>({
 
 	if (!response.ok) {
 		const error = await response.text()
+		const is5xx = response.status >= 500 && response.status <= 599
+
 		throw new McpError(
-			`Cloudflare API request failed: ${error}`,
-			response.status as ContentfulStatusCode,
+			is5xx ? 'Upstream Cloudflare API unavailable' : `Cloudflare API request failed: ${error}`,
+			(is5xx ? 502 : response.status) as ContentfulStatusCode,
 			{
-				reportToSentry: response.status >= 500,
+				reportToSentry: true,
 				internalMessage: `Cloudflare API ${response.status}: ${error}`,
 			}
 		)

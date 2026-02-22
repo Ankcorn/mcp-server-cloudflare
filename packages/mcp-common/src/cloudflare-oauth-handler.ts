@@ -112,7 +112,7 @@ export async function getUserAndAccounts(
 			is5xx ? 'Upstream user service unavailable' : 'Failed to fetch user',
 			(is5xx ? 502 : status) as ContentfulStatusCode,
 			{
-				reportToSentry: is5xx,
+				reportToSentry: true,
 				internalMessage: `Upstream /user returned ${status}`,
 			}
 		)
@@ -124,7 +124,7 @@ export async function getUserAndAccounts(
 			is5xx ? 'Upstream accounts service unavailable' : 'Failed to fetch accounts',
 			(is5xx ? 502 : status) as ContentfulStatusCode,
 			{
-				reportToSentry: is5xx,
+				reportToSentry: true,
 				internalMessage: `Upstream /accounts returned ${status}`,
 			}
 		)
@@ -180,12 +180,12 @@ export async function handleTokenExchangeCallback(
 		if (props.type === 'account_token') {
 			// Account tokens cannot be refreshed — this is a client error, not a server error
 			throw new McpError('Account tokens cannot be refreshed', 400, {
-				reportToSentry: false,
+				reportToSentry: true,
 			})
 		}
 		if (!props.refreshToken) {
 			throw new McpError('No refresh token available for this grant', 400, {
-				reportToSentry: false,
+				reportToSentry: true,
 			})
 		}
 

@@ -52,7 +52,7 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(404)
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 			expect(err.message).toContain('Cloudflare API request failed')
 		}
 	})
@@ -73,7 +73,7 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(403)
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 
@@ -93,11 +93,11 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(429)
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 
-	it('throws McpError with reportToSentry=true for 500', async () => {
+	it('throws McpError with status 502 for upstream 500 (bad gateway)', async () => {
 		fetchMock
 			.get('https://api.cloudflare.com')
 			.intercept({
@@ -112,13 +112,14 @@ describe('fetchCloudflareApi', () => {
 		} catch (e) {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
-			expect(err.code).toBe(500)
+			expect(err.code).toBe(502)
+			expect(err.message).toBe('Upstream Cloudflare API unavailable')
 			expect(err.reportToSentry).toBe(true)
 			expect(err.internalMessage).toContain('Cloudflare API 500')
 		}
 	})
 
-	it('throws McpError with reportToSentry=true for 502', async () => {
+	it('throws McpError with status 502 for upstream 502', async () => {
 		fetchMock
 			.get('https://api.cloudflare.com')
 			.intercept({
@@ -134,7 +135,9 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(502)
+			expect(err.message).toBe('Upstream Cloudflare API unavailable')
 			expect(err.reportToSentry).toBe(true)
+			expect(err.internalMessage).toContain('Cloudflare API 502')
 		}
 	})
 

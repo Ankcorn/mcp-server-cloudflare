@@ -166,7 +166,7 @@ export async function getAuthToken({
 				upstreamError.error_description || 'Token exchange failed',
 				resp.status as ContentfulStatusCode,
 				{
-					reportToSentry: false,
+					reportToSentry: true,
 					internalMessage: `Upstream ${resp.status}: ${body}`,
 				}
 			)
@@ -219,7 +219,7 @@ export async function refreshAuthToken({
 				upstreamError.error_description || 'Token refresh failed',
 				resp.status as ContentfulStatusCode,
 				{
-					reportToSentry: false,
+					reportToSentry: true,
 					internalMessage: `Upstream ${resp.status}: ${body}`,
 				}
 			)

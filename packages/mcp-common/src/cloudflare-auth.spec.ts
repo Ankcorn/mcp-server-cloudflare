@@ -68,7 +68,7 @@ describe('getAuthToken', () => {
 			const err = e as McpError
 			expect(err.code).toBe(400)
 			expect(err.message).toBe('The authorization code has expired')
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 			expect(err.internalMessage).toContain('Upstream 400')
 		}
 	})
@@ -93,7 +93,7 @@ describe('getAuthToken', () => {
 			const err = e as McpError
 			expect(err.code).toBe(401)
 			expect(err.message).toBe('Invalid client credentials')
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 
@@ -116,7 +116,7 @@ describe('getAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(403)
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 
@@ -139,7 +139,7 @@ describe('getAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(429)
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 
@@ -193,7 +193,7 @@ describe('getAuthToken', () => {
 			const err = e as McpError
 			expect(err.code).toBe(400)
 			expect(err.message).toBe('Token exchange failed')
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 })
@@ -236,7 +236,7 @@ describe('refreshAuthToken', () => {
 			const err = e as McpError
 			expect(err.code).toBe(400)
 			expect(err.message).toBe('The refresh token has expired')
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 			expect(err.internalMessage).toContain('Upstream 400')
 		}
 	})
@@ -260,7 +260,7 @@ describe('refreshAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(401)
-			expect(err.reportToSentry).toBe(false)
+			expect(err.reportToSentry).toBe(true)
 		}
 	})
 
