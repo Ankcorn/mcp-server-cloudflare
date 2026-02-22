@@ -742,11 +742,7 @@ export async function validateOAuthState(
 	const stateHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 
 	if (stateHash !== consentedStateHash) {
-		throw new OAuthError(
-			'access_denied',
-			'Session validation failed',
-			403
-		)
+		throw new OAuthError('access_denied', 'Session validation failed', 403)
 	}
 
 	// Parse and validate stored OAuth state data
@@ -765,11 +761,7 @@ export async function validateOAuthState(
 
 	const parseResult = StoredOAuthStateSchema.safeParse(JSON.parse(storedDataJson))
 	if (!parseResult.success) {
-		throw new OAuthError(
-			'invalid_request',
-			'Invalid authorization state',
-			400
-		)
+		throw new OAuthError('invalid_request', 'Invalid authorization state', 400)
 	}
 
 	await kv.delete(`oauth:state:${stateToken}`)

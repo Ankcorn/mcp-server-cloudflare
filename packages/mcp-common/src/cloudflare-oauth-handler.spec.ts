@@ -137,9 +137,7 @@ describe('handleTokenExchangeCallback', () => {
 				const err = e as OAuthError
 				expect(err.code).toBe('invalid_grant')
 				expect(err.statusCode).toBe(400)
-				expect(err.description).toBe(
-					'Authorization grant is invalid, expired, or revoked'
-				)
+				expect(err.description).toBe('Authorization grant is invalid, expired, or revoked')
 			}
 		})
 
