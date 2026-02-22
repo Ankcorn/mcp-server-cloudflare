@@ -1,64 +1,146 @@
-import { describe, expect, it } from 'vitest'
+import { fetchMock } from 'cloudflare:test'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { McpError } from './mcp-error'
 
+// Mock cloudflare:workers env to disable DEV_DISABLE_OAUTH
+vi.mock('cloudflare:workers', () => ({
+	env: { DEV_DISABLE_OAUTH: false },
+}))
+
+import { fetchCloudflareApi } from './cloudflare-api'
+import { getAuthToken, refreshAuthToken } from './cloudflare-auth'
+
+beforeAll(() => {
+	fetchMock.activate()
+	fetchMock.disableNetConnect()
+})
+
 /**
- * Test that McpError correctly sets reportToSentry based on upstream status.
- * This validates Fix 6: upstream 4xx errors from cloudflare-auth no longer
- * report to Sentry (reportToSentry=false), while genuine 5xx/502 errors still do.
+ * Tests that the actual production code sets reportToSentry correctly:
+ * - 4xx upstream errors should have reportToSentry=false (expected client errors)
+ * - 5xx upstream errors (mapped to 502) should have reportToSentry=true (unexpected)
  */
-describe('McpError reportToSentry classification', () => {
-	it('upstream 400 errors should NOT report to Sentry', () => {
-		const err = new McpError('Token refresh failed', 400, {
-			reportToSentry: false,
-			internalMessage: 'Upstream 400: invalid_grant',
+describe('reportToSentry flag in production code paths', () => {
+	describe('fetchCloudflareApi', () => {
+		const baseParams = {
+			endpoint: '/workers/scripts',
+			accountId: 'test-account-id',
+			apiToken: 'test-api-token',
+		}
+
+		it('sets reportToSentry=false for 4xx errors', async () => {
+			fetchMock
+				.get('https://api.cloudflare.com')
+				.intercept({
+					path: '/client/v4/accounts/test-account-id/workers/scripts',
+					method: 'GET',
+				})
+				.reply(404, JSON.stringify({ errors: [{ message: 'Not found' }] }))
+
+			try {
+				await fetchCloudflareApi(baseParams)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBeInstanceOf(McpError)
+				expect((e as McpError).reportToSentry).toBe(false)
+			}
 		})
-		expect(err.reportToSentry).toBe(false)
+
+		it('sets reportToSentry=true for 5xx errors', async () => {
+			fetchMock
+				.get('https://api.cloudflare.com')
+				.intercept({
+					path: '/client/v4/accounts/test-account-id/workers/scripts',
+					method: 'GET',
+				})
+				.reply(500, 'Internal Server Error')
+
+			try {
+				await fetchCloudflareApi(baseParams)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBeInstanceOf(McpError)
+				expect((e as McpError).reportToSentry).toBe(true)
+			}
+		})
 	})
 
-	it('upstream 401 errors should NOT report to Sentry', () => {
-		const err = new McpError('Invalid client credentials', 401, {
-			reportToSentry: false,
-			internalMessage: 'Upstream 401: invalid_client',
+	describe('getAuthToken', () => {
+		const baseParams = {
+			client_id: 'test-client-id',
+			client_secret: 'test-client-secret',
+			redirect_uri: 'https://example.com/callback',
+			code_verifier: 'test-verifier',
+			code: 'test-code',
+		}
+
+		it('sets reportToSentry=false for 400 (invalid_grant)', async () => {
+			fetchMock
+				.get('https://dash.cloudflare.com')
+				.intercept({ path: '/oauth2/token', method: 'POST' })
+				.reply(400, JSON.stringify({ error: 'invalid_grant' }))
+
+			try {
+				await getAuthToken(baseParams)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBeInstanceOf(McpError)
+				expect((e as McpError).reportToSentry).toBe(false)
+			}
 		})
-		expect(err.reportToSentry).toBe(false)
+
+		it('sets reportToSentry=true for 502 (upstream 500)', async () => {
+			fetchMock
+				.get('https://dash.cloudflare.com')
+				.intercept({ path: '/oauth2/token', method: 'POST' })
+				.reply(500, 'Internal Server Error')
+
+			try {
+				await getAuthToken(baseParams)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBeInstanceOf(McpError)
+				expect((e as McpError).reportToSentry).toBe(true)
+			}
+		})
 	})
 
-	it('upstream 429 errors should NOT report to Sentry', () => {
-		const err = new McpError('Too many requests', 429, {
-			reportToSentry: false,
-			internalMessage: 'Upstream 429',
-		})
-		expect(err.reportToSentry).toBe(false)
-	})
+	describe('refreshAuthToken', () => {
+		const baseParams = {
+			client_id: 'test-client-id',
+			client_secret: 'test-client-secret',
+			refresh_token: 'test-refresh-token',
+		}
 
-	it('upstream 502 (bad gateway) errors SHOULD report to Sentry', () => {
-		const err = new McpError('Upstream token service unavailable', 502, {
-			reportToSentry: true,
-			internalMessage: 'Upstream 500: Internal Server Error',
-		})
-		expect(err.reportToSentry).toBe(true)
-	})
+		it('sets reportToSentry=false for 400 (expired refresh token)', async () => {
+			fetchMock
+				.get('https://dash.cloudflare.com')
+				.intercept({ path: '/oauth2/token', method: 'POST' })
+				.reply(400, JSON.stringify({ error: 'invalid_grant' }))
 
-	it('account token refresh (400) should NOT report to Sentry', () => {
-		const err = new McpError('Account tokens cannot be refreshed', 400, {
-			reportToSentry: false,
+			try {
+				await refreshAuthToken(baseParams)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBeInstanceOf(McpError)
+				expect((e as McpError).reportToSentry).toBe(false)
+			}
 		})
-		expect(err.reportToSentry).toBe(false)
-	})
 
-	it('missing refresh token (400) should NOT report to Sentry', () => {
-		const err = new McpError('No refresh token available for this grant', 400, {
-			reportToSentry: false,
-		})
-		expect(err.reportToSentry).toBe(false)
-	})
+		it('sets reportToSentry=true for 502 (upstream 500)', async () => {
+			fetchMock
+				.get('https://dash.cloudflare.com')
+				.intercept({ path: '/oauth2/token', method: 'POST' })
+				.reply(500, 'Server Error')
 
-	it('preserves internalMessage for debugging', () => {
-		const err = new McpError('Token refresh failed', 400, {
-			reportToSentry: false,
-			internalMessage: 'Upstream 400: {"error":"invalid_grant","error_description":"expired"}',
+			try {
+				await refreshAuthToken(baseParams)
+				expect.unreachable()
+			} catch (e) {
+				expect(e).toBeInstanceOf(McpError)
+				expect((e as McpError).reportToSentry).toBe(true)
+			}
 		})
-		expect(err.internalMessage).toContain('invalid_grant')
 	})
 })

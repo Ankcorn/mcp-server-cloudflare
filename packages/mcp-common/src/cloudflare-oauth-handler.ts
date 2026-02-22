@@ -9,7 +9,7 @@ import {
 	getAuthToken,
 	refreshAuthToken,
 } from './cloudflare-auth'
-import { McpError } from './mcp-error'
+import { McpError, safeStatusCode } from './mcp-error'
 import { useSentry } from './sentry'
 import { V4Schema } from './v4-api'
 import {
@@ -30,7 +30,6 @@ import type {
 	TokenExchangeCallbackResult,
 } from '@cloudflare/workers-oauth-provider'
 import type { Context } from 'hono'
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { MetricsTracker } from '../../mcp-observability/src'
 import type { BaseHonoContext } from './sentry'
 
@@ -99,10 +98,24 @@ export async function getUserAndAccounts(
 		}),
 	])
 
-	const { result: user } = V4Schema(UserSchema).parse(await userResponse.json())
+	// Check response status before parsing to avoid Zod errors on non-V4 error bodies
+	if (!accountsResponse.ok) {
+		const status = accountsResponse.status
+		const is5xx = status >= 500 && status <= 599
+		throw new McpError(
+			is5xx ? 'Upstream accounts service unavailable' : 'Failed to fetch accounts',
+			safeStatusCode(is5xx ? 502 : status),
+			{
+				reportToSentry: is5xx,
+				internalMessage: `Upstream /accounts returned ${status}`,
+			}
+		)
+	}
+
 	const { result: accounts } = V4Schema(AccountsSchema).parse(await accountsResponse.json())
-	if (!user || !userResponse.ok) {
-		// If accounts is present, then assume that we have an account scoped token
+
+	if (!userResponse.ok) {
+		// If accounts is present, assume we have an account-scoped token
 		if (accounts !== null) {
 			return { user: null, accounts }
 		}
@@ -110,24 +123,30 @@ export async function getUserAndAccounts(
 		const is5xx = status >= 500 && status <= 599
 		throw new McpError(
 			is5xx ? 'Upstream user service unavailable' : 'Failed to fetch user',
-			(is5xx ? 502 : status) as ContentfulStatusCode,
+			safeStatusCode(is5xx ? 502 : status),
 			{
-				reportToSentry: true,
+				reportToSentry: is5xx,
 				internalMessage: `Upstream /user returned ${status}`,
 			}
 		)
 	}
-	if (!accounts || !accountsResponse.ok) {
-		const status = accountsResponse.status
-		const is5xx = status >= 500 && status <= 599
-		throw new McpError(
-			is5xx ? 'Upstream accounts service unavailable' : 'Failed to fetch accounts',
-			(is5xx ? 502 : status) as ContentfulStatusCode,
-			{
-				reportToSentry: true,
-				internalMessage: `Upstream /accounts returned ${status}`,
-			}
-		)
+
+	const { result: user } = V4Schema(UserSchema).parse(await userResponse.json())
+	if (!user) {
+		// User parse succeeded but result was null — fall back to accounts if available
+		if (accounts !== null) {
+			return { user: null, accounts }
+		}
+		throw new McpError('Failed to fetch user', 500, {
+			reportToSentry: true,
+			internalMessage: 'Upstream /user returned null result with 200 status',
+		})
+	}
+	if (!accounts) {
+		throw new McpError('Failed to fetch accounts', 500, {
+			reportToSentry: true,
+			internalMessage: 'Upstream /accounts returned null result with 200 status',
+		})
 	}
 
 	return { user, accounts }
@@ -180,12 +199,12 @@ export async function handleTokenExchangeCallback(
 		if (props.type === 'account_token') {
 			// Account tokens cannot be refreshed — this is a client error, not a server error
 			throw new McpError('Account tokens cannot be refreshed', 400, {
-				reportToSentry: true,
+				reportToSentry: false,
 			})
 		}
 		if (!props.refreshToken) {
 			throw new McpError('No refresh token available for this grant', 400, {
-				reportToSentry: true,
+				reportToSentry: false,
 			})
 		}
 

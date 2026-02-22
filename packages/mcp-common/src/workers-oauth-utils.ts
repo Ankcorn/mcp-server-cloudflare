@@ -558,7 +558,7 @@ export async function parseRedirectApproval(
 
 	const tokenFromForm = formData.get('csrf_token')
 	if (!tokenFromForm || typeof tokenFromForm !== 'string') {
-		throw new OAuthError('invalid_request', 'Missing CSRF token in form data', 400)
+		throw new OAuthError('invalid_request', 'Missing required form token', 400)
 	}
 
 	const cookieHeader = request.headers.get('Cookie') || ''
@@ -567,7 +567,7 @@ export async function parseRedirectApproval(
 	const tokenFromCookie = csrfCookie ? csrfCookie.substring('__Host-CSRF_TOKEN='.length) : null
 
 	if (!tokenFromCookie || tokenFromForm !== tokenFromCookie) {
-		throw new OAuthError('access_denied', 'CSRF token mismatch', 403)
+		throw new OAuthError('access_denied', 'Request validation failed', 403)
 	}
 
 	const encodedState = formData.get('state')
@@ -730,7 +730,7 @@ export async function validateOAuthState(
 	if (!consentedStateHash) {
 		throw new OAuthError(
 			'invalid_request',
-			'Missing session binding cookie - authorization flow must be restarted',
+			'Authorization session expired, please restart the flow',
 			400
 		)
 	}
@@ -744,7 +744,7 @@ export async function validateOAuthState(
 	if (stateHash !== consentedStateHash) {
 		throw new OAuthError(
 			'access_denied',
-			'State token does not match session - possible CSRF attack detected',
+			'Session validation failed',
 			403
 		)
 	}
@@ -767,7 +767,7 @@ export async function validateOAuthState(
 	if (!parseResult.success) {
 		throw new OAuthError(
 			'invalid_request',
-			'Invalid OAuth state data format - PKCE security violation',
+			'Invalid authorization state',
 			400
 		)
 	}

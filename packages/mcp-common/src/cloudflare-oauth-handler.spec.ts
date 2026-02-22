@@ -55,7 +55,7 @@ describe('handleTokenExchangeCallback', () => {
 				const err = e as McpError
 				expect(err.code).toBe(400)
 				expect(err.message).toBe('Account tokens cannot be refreshed')
-				expect(err.reportToSentry).toBe(true)
+				expect(err.reportToSentry).toBe(false)
 			}
 		})
 	})
@@ -78,7 +78,7 @@ describe('handleTokenExchangeCallback', () => {
 				const err = e as McpError
 				expect(err.code).toBe(400)
 				expect(err.message).toBe('No refresh token available for this grant')
-				expect(err.reportToSentry).toBe(true)
+				expect(err.reportToSentry).toBe(false)
 			}
 		})
 	})
@@ -114,8 +114,8 @@ describe('handleTokenExchangeCallback', () => {
 	describe('propagates upstream errors from refreshAuthToken', () => {
 		it('propagates McpError 400 from expired upstream refresh token', async () => {
 			mockRefreshAuthToken.mockRejectedValueOnce(
-				new McpError('The refresh token has expired', 400, {
-					reportToSentry: true,
+				new McpError('Authorization grant is invalid, expired, or revoked', 400, {
+					reportToSentry: false,
 					internalMessage: 'Upstream 400: {"error":"invalid_grant"}',
 				})
 			)
@@ -135,7 +135,7 @@ describe('handleTokenExchangeCallback', () => {
 				expect(e).toBeInstanceOf(McpError)
 				const err = e as McpError
 				expect(err.code).toBe(400)
-				expect(err.reportToSentry).toBe(true)
+				expect(err.reportToSentry).toBe(false)
 			}
 		})
 

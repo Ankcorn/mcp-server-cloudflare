@@ -51,8 +51,9 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(404)
-			expect(err.reportToSentry).toBe(true)
-			expect(err.message).toContain('Cloudflare API request failed')
+			expect(err.reportToSentry).toBe(false)
+			expect(err.message).toBe('Cloudflare API request failed')
+			expect(err.internalMessage).toContain('Script not found')
 		}
 	})
 
@@ -72,7 +73,7 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(403)
-			expect(err.reportToSentry).toBe(true)
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 
@@ -92,7 +93,7 @@ describe('fetchCloudflareApi', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(429)
-			expect(err.reportToSentry).toBe(true)
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 
@@ -140,7 +141,7 @@ describe('fetchCloudflareApi', () => {
 		}
 	})
 
-	it('preserves error text in the McpError message', async () => {
+	it('preserves error text in internalMessage (not user-facing message)', async () => {
 		const errorBody = '{"errors":[{"message":"Worker not found","code":10007}]}'
 		fetchMock
 			.get('https://api.cloudflare.com')
@@ -156,7 +157,8 @@ describe('fetchCloudflareApi', () => {
 		} catch (e) {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
-			expect(err.message).toContain('Worker not found')
+			expect(err.message).toBe('Cloudflare API request failed')
+			expect(err.internalMessage).toContain('Worker not found')
 		}
 	})
 })

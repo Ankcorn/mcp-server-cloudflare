@@ -67,9 +67,10 @@ describe('getAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(400)
-			expect(err.message).toBe('The authorization code has expired')
-			expect(err.reportToSentry).toBe(true)
+			expect(err.message).toBe('Authorization grant is invalid, expired, or revoked')
+			expect(err.reportToSentry).toBe(false)
 			expect(err.internalMessage).toContain('Upstream 400')
+			expect(err.internalMessage).toContain('The authorization code has expired')
 		}
 	})
 
@@ -92,8 +93,8 @@ describe('getAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(401)
-			expect(err.message).toBe('Invalid client credentials')
-			expect(err.reportToSentry).toBe(true)
+			expect(err.message).toBe('Client authentication failed')
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 
@@ -116,7 +117,8 @@ describe('getAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(403)
-			expect(err.reportToSentry).toBe(true)
+			expect(err.message).toBe('Access denied')
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 
@@ -139,7 +141,7 @@ describe('getAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(429)
-			expect(err.reportToSentry).toBe(true)
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 
@@ -193,7 +195,7 @@ describe('getAuthToken', () => {
 			const err = e as McpError
 			expect(err.code).toBe(400)
 			expect(err.message).toBe('Token exchange failed')
-			expect(err.reportToSentry).toBe(true)
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 })
@@ -235,9 +237,10 @@ describe('refreshAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(400)
-			expect(err.message).toBe('The refresh token has expired')
-			expect(err.reportToSentry).toBe(true)
+			expect(err.message).toBe('Authorization grant is invalid, expired, or revoked')
+			expect(err.reportToSentry).toBe(false)
 			expect(err.internalMessage).toContain('Upstream 400')
+			expect(err.internalMessage).toContain('The refresh token has expired')
 		}
 	})
 
@@ -260,7 +263,7 @@ describe('refreshAuthToken', () => {
 			expect(e).toBeInstanceOf(McpError)
 			const err = e as McpError
 			expect(err.code).toBe(401)
-			expect(err.reportToSentry).toBe(true)
+			expect(err.reportToSentry).toBe(false)
 		}
 	})
 
@@ -282,11 +285,11 @@ describe('refreshAuthToken', () => {
 		}
 	})
 
-	it('uses fallback message when upstream error has no error_description', async () => {
+	it('uses fallback message when upstream error code is unknown', async () => {
 		fetchMock
 			.get('https://dash.cloudflare.com')
 			.intercept({ path: '/oauth2/token', method: 'POST' })
-			.reply(400, JSON.stringify({ error: 'invalid_grant' }))
+			.reply(400, JSON.stringify({ error: 'some_unknown_error' }))
 
 		try {
 			await refreshAuthToken(baseParams)
@@ -296,6 +299,31 @@ describe('refreshAuthToken', () => {
 			const err = e as McpError
 			expect(err.code).toBe(400)
 			expect(err.message).toBe('Token refresh failed')
+			expect(err.reportToSentry).toBe(false)
+		}
+	})
+
+	it('maps known error codes to safe messages instead of forwarding error_description', async () => {
+		fetchMock
+			.get('https://dash.cloudflare.com')
+			.intercept({ path: '/oauth2/token', method: 'POST' })
+			.reply(
+				400,
+				JSON.stringify({
+					error: 'invalid_grant',
+					error_description: 'Internal: token xyz expired at 2024-01-01',
+				})
+			)
+
+		try {
+			await refreshAuthToken(baseParams)
+			expect.unreachable()
+		} catch (e) {
+			expect(e).toBeInstanceOf(McpError)
+			const err = e as McpError
+			expect(err.message).toBe('Authorization grant is invalid, expired, or revoked')
+			// Raw upstream detail preserved in internalMessage only
+			expect(err.internalMessage).toContain('Internal: token xyz expired')
 		}
 	})
 })

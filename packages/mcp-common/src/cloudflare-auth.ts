@@ -1,9 +1,19 @@
 import { z } from 'zod'
 
-import { McpError } from './mcp-error'
+import { McpError, safeStatusCode } from './mcp-error'
 
 import type { AuthRequest } from '@cloudflare/workers-oauth-provider'
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
+
+/** Maps known OAuth error codes to safe client-facing messages */
+const SAFE_TOKEN_ERROR_MESSAGES: Record<string, string> = {
+	invalid_grant: 'Authorization grant is invalid, expired, or revoked',
+	invalid_client: 'Client authentication failed',
+	invalid_request: 'Invalid token request',
+	unauthorized_client: 'Client is not authorized for this grant type',
+	unsupported_grant_type: 'Unsupported grant type',
+	invalid_scope: 'Requested scope is invalid',
+	access_denied: 'Access denied',
+}
 
 // Constants
 const PKCE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
@@ -163,10 +173,10 @@ export async function getAuthToken({
 
 		if (resp.status >= 400 && resp.status < 500) {
 			throw new McpError(
-				upstreamError.error_description || 'Token exchange failed',
-				resp.status as ContentfulStatusCode,
+				SAFE_TOKEN_ERROR_MESSAGES[upstreamError.error || ''] || 'Token exchange failed',
+				safeStatusCode(resp.status),
 				{
-					reportToSentry: true,
+					reportToSentry: false,
 					internalMessage: `Upstream ${resp.status}: ${body}`,
 				}
 			)
@@ -216,10 +226,10 @@ export async function refreshAuthToken({
 
 		if (resp.status >= 400 && resp.status < 500) {
 			throw new McpError(
-				upstreamError.error_description || 'Token refresh failed',
-				resp.status as ContentfulStatusCode,
+				SAFE_TOKEN_ERROR_MESSAGES[upstreamError.error || ''] || 'Token refresh failed',
+				safeStatusCode(resp.status),
 				{
-					reportToSentry: true,
+					reportToSentry: false,
 					internalMessage: `Upstream ${resp.status}: ${body}`,
 				}
 			)

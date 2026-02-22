@@ -47,7 +47,7 @@ describe('parseRedirectApproval', () => {
 		}
 	})
 
-	it('throws OAuthError 400 for missing CSRF token', async () => {
+	it('throws OAuthError 400 for missing form token', async () => {
 		const formData = new FormData()
 		formData.set('state', btoa(JSON.stringify({ oauthReqInfo: { clientId: 'test' } })))
 		// no csrf_token
@@ -65,11 +65,11 @@ describe('parseRedirectApproval', () => {
 			const err = e as OAuthError
 			expect(err.statusCode).toBe(400)
 			expect(err.code).toBe('invalid_request')
-			expect(err.description).toContain('CSRF token')
+			expect(err.description).toContain('Missing required form token')
 		}
 	})
 
-	it('throws OAuthError 403 for CSRF token mismatch', async () => {
+	it('throws OAuthError 403 for form token mismatch', async () => {
 		const formData = new FormData()
 		formData.set('csrf_token', 'form-token')
 		formData.set('state', btoa(JSON.stringify({ oauthReqInfo: { clientId: 'test' } })))
@@ -90,7 +90,7 @@ describe('parseRedirectApproval', () => {
 			const err = e as OAuthError
 			expect(err.statusCode).toBe(403)
 			expect(err.code).toBe('access_denied')
-			expect(err.description).toContain('CSRF token mismatch')
+			expect(err.description).toBe('Request validation failed')
 		}
 	})
 
@@ -250,7 +250,7 @@ describe('validateOAuthState', () => {
 		}
 	})
 
-	it('throws OAuthError 400 for missing session binding cookie', async () => {
+	it('throws OAuthError 400 for expired authorization session', async () => {
 		const stateToken = 'test-state-token'
 		const state = btoa(JSON.stringify({ state: stateToken }))
 		const storedData = JSON.stringify({
@@ -276,11 +276,11 @@ describe('validateOAuthState', () => {
 			const err = e as OAuthError
 			expect(err.statusCode).toBe(400)
 			expect(err.code).toBe('invalid_request')
-			expect(err.description).toContain('Missing session binding cookie')
+			expect(err.description).toContain('session expired')
 		}
 	})
 
-	it('throws OAuthError 403 for CSRF (state hash mismatch)', async () => {
+	it('throws OAuthError 403 for state hash mismatch', async () => {
 		const stateToken = 'test-state-token'
 		const state = btoa(JSON.stringify({ state: stateToken }))
 		const storedData = JSON.stringify({
@@ -309,11 +309,11 @@ describe('validateOAuthState', () => {
 			const err = e as OAuthError
 			expect(err.statusCode).toBe(403)
 			expect(err.code).toBe('access_denied')
-			expect(err.description).toContain('CSRF')
+			expect(err.description).toBe('Session validation failed')
 		}
 	})
 
-	it('throws OAuthError 400 for invalid stored state format (PKCE violation)', async () => {
+	it('throws OAuthError 400 for invalid stored state format', async () => {
 		const stateToken = 'test-state-token'
 		const state = btoa(JSON.stringify({ state: stateToken }))
 
@@ -345,7 +345,7 @@ describe('validateOAuthState', () => {
 			const err = e as OAuthError
 			expect(err.statusCode).toBe(400)
 			expect(err.code).toBe('invalid_request')
-			expect(err.description).toContain('PKCE')
+			expect(err.description).toBe('Invalid authorization state')
 		}
 	})
 })
